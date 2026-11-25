@@ -649,6 +649,9 @@
       const m = window.location.pathname.match(/\/check\/r\/([a-zA-Z0-9_-]+)/);
       if (m) {
         const rid = m[1];
+        document.querySelectorAll('a[href*="Forge_Systems_0bot?start="]').forEach((a) => {
+          a.href = "https://t.me/Forge_Systems_0bot?start=check_r";
+        });
         fetch("/api/check/report/" + encodeURIComponent(rid))
           .then((r) => r.json())
           .then((d) => {

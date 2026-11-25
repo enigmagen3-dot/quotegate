@@ -166,6 +166,37 @@ class QuotegateHandler(BaseHTTPRequestHandler):
         if not head_only:
             self.wfile.write(raw)
 
+    def _send_report_html(self, rid: str, head_only: bool = False) -> None:
+        import html as _html
+        with open(HTML_PATH, "r", encoding="utf-8") as f:
+            page = f.read()
+        rep = _load_report(rid)
+        if rep:
+            s = rep.get("summary") or {}
+            verdict = rep.get("verdict", "AUDITED")
+            og_title = f"QuoteGate Audit [{verdict}]: OK={s.get('ok', 0)} FAIL={s.get('fail', 0)} SKIP={s.get('skip', 0)}"
+            first_fail = next((r for r in (rep.get("results") or []) if r.get("status") == "FAIL"), None)
+            if first_fail:
+                og_desc = f"Caught: {first_fail.get('reason', '')} — {first_fail.get('claim', '')[:120]}"
+            else:
+                og_desc = "Deterministic verification against live HTTP 200 sources via PULSAR QuoteGate (MIT)."
+            og_url = f"{PUBLIC_BASE}/check/r/{rid}"
+            meta = (
+                f'<title>{_html.escape(og_title)}</title>\n'
+                f'  <meta property="og:title" content="{_html.escape(og_title)}" />\n'
+                f'  <meta property="og:description" content="{_html.escape(og_desc)}" />\n'
+                f'  <meta property="og:url" content="{_html.escape(og_url)}" />'
+            )
+            page = re.sub(r"<title>.*?</title>", lambda _m: meta, page, count=1, flags=re.S)
+        raw = page.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        self.end_headers()
+        if not head_only:
+            self.wfile.write(raw)
+
     def log_message(self, fmt: str, *args) -> None:
         # Keep stdout compact for systemd journal
         pass
@@ -178,8 +209,11 @@ class QuotegateHandler(BaseHTTPRequestHandler):
 
     def _handle_get(self, head_only: bool = False) -> None:
         path = self.path.split("?", 1)[0]
-        if path in ("/check", "/check/", "/") or path.startswith("/check/r/"):
+        if path in ("/check", "/check/", "/"):
             return self._send_html(200, HTML_PATH, head_only=head_only)
+        if path.startswith("/check/r/"):
+            rid = path.split("/check/r/", 1)[1].strip("/")
+            return self._send_report_html(rid, head_only=head_only)
         if path == "/api/check/healthz":
             return self._send_json(200, {"ok": True, "service": "quotegate-web", "version": "1.1"}, head_only=head_only)
         if path == "/api/check/stats":

@@ -162,7 +162,10 @@ class TestQuotegate(unittest.TestCase):
 
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/check/r/{rid}") as r:
                     self.assertEqual(r.status, 200)
-                    self.assertIn(b"PULSAR // QUOTEGATE", r.read())
+                    body = r.read().decode("utf-8")
+                    self.assertIn("PULSAR // QUOTEGATE", body)
+                    self.assertIn("og:title", body)
+                    self.assertIn("QuoteGate Audit [PASSED]", body)
             finally:
                 srv.shutdown()
                 srv.server_close()
