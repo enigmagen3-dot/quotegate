@@ -166,6 +166,10 @@ class _TextExtractor(HTMLParser):
         elif t in BLOCK_TAGS:
             self.chunks.append(" ")
             self._flush_block()
+        elif t in {"span", "label", "button", "small", "time"}:
+            self.chunks.append(" ")
+            if self._chrome_depth == 0:
+                self._block_text.append(" ")
 
     def _flush_block(self) -> None:
         block_str = " ".join("".join(self._block_text).split())
@@ -195,7 +199,18 @@ def normalize_text(text: str) -> str:
     text = html.unescape(text)
     replacements = {
         "\u00a0": " ",
+        "\u202f": " ",
+        "\u2009": " ",
+        "\u200a": " ",
+        "\u2007": " ",
+        "\u205f": " ",
+        "\u3000": " ",
         "\u200b": "",
+        "\u200c": "",
+        "\u200d": "",
+        "\u2060": "",
+        "\ufeff": "",
+        "\xad": "",
         "«": '"',
         "»": '"',
         "“": '"',
@@ -206,6 +221,10 @@ def normalize_text(text: str) -> str:
         "—": "-",
         "–": "-",
         "−": "-",
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2212": "-",
     }
     for src, dst in replacements.items():
         text = text.replace(src, dst)
@@ -213,7 +232,7 @@ def normalize_text(text: str) -> str:
 
 
 def normalize_for_match(text: str) -> str:
-    return normalize_text(text).lower()
+    return normalize_text(text).lower().replace("ё", "е")
 
 
 def _cyrillic_ratio(text: str) -> float:
@@ -318,7 +337,9 @@ class CheckResult:
     matched_snippet: str = ""
 
 
-_NUM_TOKEN_RE = re.compile(r"(?:\$|€|₽)?\b\d+(?:[\s\u00a0]\d{3})*(?:[.,]\d+)?\s*(?:[%₽$€]|тыс|млн|млрд)?\b")
+_NUM_TOKEN_RE = re.compile(
+    r"(?:\$|€|₽)?\b\d+(?:(?:[\s\u00a0\u202f\u2009]|,)\d{3})*(?:[.,]\d+)?\s*(?:[%₽$€]|тыс|млн|млрд)?\b"
+)
 _QUOTED_SPAN_RE = re.compile(r'(?:«([^»]{12,280})»|"([^"]{12,280})"|„([^“]{12,280})“)')
 _MD_LINK_RE = re.compile(r"\[([^\]]{1,140})\]\((https?://[^\s)]+)\)")
 _RAW_URL_RE = re.compile(r"(https?://[^\s<>()\[\]\"']+)")
@@ -334,12 +355,15 @@ def _extract_meaningful_numbers(text: str) -> List[str]:
     clean = _RAW_URL_RE.sub(" ", clean)
     for m in _NUM_TOKEN_RE.finditer(clean):
         raw_tok = m.group(0).strip()
-        digits = re.sub(r"\D", "", raw_tok)
+        num_core = re.sub(r"[^0-9.,]", "", raw_tok)
+        digits = re.sub(r"\D", "", num_core)
         if not digits:
             continue
         if len(digits) == 1 and not any(ch in raw_tok for ch in "%$₽€"):
             continue
-        nums.append(digits)
+        dec_match = re.match(r"^(\d+)[.,](\d{1,2})$", num_core)
+        token = f"{dec_match.group(1)}.{dec_match.group(2)}" if dec_match else digits
+        nums.append(token)
     seen = set()
     out = []
     for n in nums:
@@ -352,7 +376,7 @@ def _extract_meaningful_numbers(text: str) -> List[str]:
 def _significant_words(text: str) -> List[str]:
     clean = _MD_LINK_RE.sub(r"\1", text)
     clean = _RAW_URL_RE.sub(" ", clean)
-    words = re.findall(r"[A-Za-zА-Яа-яЁё0-9-]{5,}", clean.lower())
+    words = re.findall(r"[A-Za-zА-Яа-яЁё0-9-]{5,}", clean.lower().replace("ё", "е"))
     stop = {
         "https", "http", "quotegate", "report", "source", "цитата", "источник",
         "ссылка", "почему", "который", "которая", "которые", "можно", "нужно",
@@ -469,13 +493,19 @@ def parse_checks_from_text(text: str) -> List[CheckSpec]:
     return specs
 
 
-def _find_number_match(num_digits: str, page_norm_compact_digits: str, page_norm: str) -> Optional[int]:
-    m = re.search(rf"(?<!\d){re.escape(num_digits)}(?!\d)", page_norm)
+def _find_number_match(num_token: str, page_norm_compact_digits: str, page_norm: str) -> Optional[int]:
+    if "." in num_token:
+        whole, frac = num_token.split(".", 1)
+        m_dec = re.search(rf"(?<!\d){re.escape(whole)}[.,]{re.escape(frac)}(?!\d)", page_norm)
+        if m_dec:
+            return m_dec.start()
+        return None
+    m = re.search(rf"(?<!\d){re.escape(num_token)}(?!\d)", page_norm)
     if m:
         return m.start()
-    if len(num_digits) >= 4:
-        # Handle space-grouped thousands like "1 669" or "15 000"
-        spaced = r"[\s\u00a0]?".join(re.escape(ch) for ch in num_digits)
+    if len(num_token) >= 4:
+        # Handle space- or comma-grouped thousands like "1 669", "15 000", or "1,500"
+        spaced = r"[\s\u00a0,]?".join(re.escape(ch) for ch in num_token)
         m2 = re.search(rf"(?<!\d){spaced}(?!\d)", page_norm)
         if m2:
             return m2.start()

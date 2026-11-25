@@ -155,6 +155,32 @@ class TestQuotegate(unittest.TestCase):
                 srv.shutdown()
                 srv.server_close()
 
+    def test_messy_unicode_spaces_spans_yo_and_decimals(self):
+        html_doc = (
+            "<html><body><main>"
+            "<span>AI и нейросети</span><span>GPT-агенты работают\u202fв\u00a0CRM с точностью 99,9% и чеком 1\u202f500 ₽, всё проверено.</span>"
+            "</main></body></html>"
+        )
+        p = qg._TextExtractor(base_url="https://example.org/ru")
+        p.feed(html_doc)
+        p.close()
+        clean = qg.normalize_text("".join(p.chunks))
+        self.assertIn("нейросети GPT-агенты", clean)
+        self.assertNotIn("нейросетиGPT", clean)
+
+        page = qg.FetchedPage("https://example.org/ru", "https://example.org/ru", 200, clean + " " * 150, [])
+        res_quote = qg.evaluate_spec(
+            qg.CheckSpec("S01", "https://example.org/ru", quote="работают в CRM с точностью 99,9% и чеком 1 500 ₽, все проверено"),
+            page,
+        )
+        self.assertEqual(res_quote.status, "OK")
+
+        res_num = qg.evaluate_spec(
+            qg.CheckSpec("S02", "https://example.org/ru", context="Точность агента 99.9% при чеке 1 500 ₽ по https://example.org/ru"),
+            page,
+        )
+        self.assertEqual(res_num.status, "OK")
+
 
 if __name__ == "__main__":
     unittest.main()
