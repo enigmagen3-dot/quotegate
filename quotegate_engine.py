@@ -493,7 +493,7 @@ def evaluate_spec(spec: CheckSpec, page: FetchedPage) -> CheckResult:
     page_norm = normalize_for_match(page.text)
 
     # Cross-language protection: don't fail a Cyrillic translation against an English page
-    if len(page.text) >= 400:
+    if len(page.text) >= 160:
         claim_cyr = _cyrillic_ratio(spec.quote or spec.context)
         page_cyr = _cyrillic_ratio(page.text[:4000])
         if claim_cyr > 0.35 and page_cyr < 0.05:
