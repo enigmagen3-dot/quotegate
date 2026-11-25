@@ -106,16 +106,17 @@ class QuotegateHandler(BaseHTTPRequestHandler):
         xri = self.headers.get("X-Real-IP", "").strip()
         return xff or xri or (self.client_address[0] if self.client_address else "unknown")
 
-    def _send_json(self, code: int, payload: dict) -> None:
+    def _send_json(self, code: int, payload: dict, head_only: bool = False) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(raw)
+        if not head_only:
+            self.wfile.write(raw)
 
-    def _send_html(self, code: int, path: str) -> None:
+    def _send_html(self, code: int, path: str, head_only: bool = False) -> None:
         with open(path, "rb") as f:
             raw = f.read()
         self.send_response(code)
@@ -123,21 +124,28 @@ class QuotegateHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-cache, must-revalidate")
         self.end_headers()
-        self.wfile.write(raw)
+        if not head_only:
+            self.wfile.write(raw)
 
     def log_message(self, fmt: str, *args) -> None:
         # Keep stdout compact for systemd journal
         pass
 
+    def do_HEAD(self) -> None:
+        self._handle_get(head_only=True)
+
     def do_GET(self) -> None:
+        self._handle_get(head_only=False)
+
+    def _handle_get(self, head_only: bool = False) -> None:
         path = self.path.split("?", 1)[0]
         if path in ("/check", "/check/", "/"):
-            return self._send_html(200, HTML_PATH)
+            return self._send_html(200, HTML_PATH, head_only=head_only)
         if path == "/api/check/healthz":
-            return self._send_json(200, {"ok": True, "service": "quotegate-web", "version": "1.0"})
+            return self._send_json(200, {"ok": True, "service": "quotegate-web", "version": "1.0"}, head_only=head_only)
         if path == "/api/check/stats":
-            return self._send_json(200, {"ok": True, "stats": _get_stats()})
-        self._send_json(404, {"error": "Not found"})
+            return self._send_json(200, {"ok": True, "stats": _get_stats()}, head_only=head_only)
+        self._send_json(404, {"error": "Not found"}, head_only=head_only)
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
