@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PULSAR // quotegate — живая проверка цитат и цифр нейросетей</title>
+  <meta name="description" content="HTTP 200 доказывает, что страница существует. Не то, что на ней есть заявленная цитата или цифра. Проверь отчёт ИИ за 5 секунд." />
+  <meta name="theme-color" content="#050507" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23050507'/%3E%3Crect x='6' y='6' width='20' height='20' fill='none' stroke='%23ECECF2' stroke-width='1'/%3E%3Crect x='13' y='13' width='6' height='6' fill='%232B2BFF'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Sometype+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --void: #050507;
+      --panel: #090910;
+      --panel-2: #0D0D18;
+      --ink: #ECECF2;
+      --ink-2: #9494AD;
+      --muted: #56566E;
+      --blue: #2B2BFF;
+      --blue-hi: #5B5BFF;
+      --ok: #6BE3C4;
+      --err: #FF4D6A;
+      --warn: #F7C948;
+      --line: rgba(236, 236, 242, 0.09);
+      --line-2: rgba(236, 236, 242, 0.18);
+      --disp: 'Bricolage Grotesque', system-ui, sans-serif;
+      --mono: 'Sometype Mono', ui-monospace, SFMono-Regular, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--void);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 14px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 1020px; margin: 0 auto; padding: 24px 18px 72px; }
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 28px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      font-size: 13px;
+    }
+    .brand-sq {
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--ink);
+      display: grid;
+      place-items: center;
+    }
+    .brand-sq::after {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: var(--blue);
+    }
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      padding: 6px 11px;
+      border: 1px solid var(--line-2);
+      background: var(--panel);
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--ink-2);
+      transition: border-color .15s, color .15s;
+    }
+    .pill:hover, .pill.active { border-color: var(--ink); color: var(--ink); }
+    .pill-blue {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+      font-weight: 600;
+    }
+    .pill-blue:hover { background: var(--blue-hi); border-color: var(--blue-hi); }
+
+    h1 {
+      font-family: var(--disp);
+      font-size: clamp(28px, 4.6vw, 48px);
+      line-height: 1.06;
+      letter-spacing: -0.02em;
+      margin: 0 0 12px;
+      font-weight: 800;
+    }
+    .lead {
+      color: var(--ink-2);
+      max-width: 74ch;
+      margin: 0 0 22px;
+      font-size: 14px;
+    }
+    .lead strong { color: var(--ink); font-weight: 600; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+    }
+    .metric-val {
+      font-family: var(--disp);
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+    .metric-lbl { font-size: 11px; color: var(--ink-2); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .box {
+      background: var(--panel);
+      border: 1px solid var(--line-2);
+      padding: 18px;
+    }
+    .samples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    .samples-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+    .sample-btn {
+      background: var(--panel-2);
+      border: 1px solid var(--line-2);
+      color: var(--ink-2);
+      padding: 6px 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .sample-btn:hover { border-color: var(--blue-hi); color: var(--ink); }
+
+    textarea {
+      width: 100%;
+      min-height: 185px;
+      background: #040406;
+      border: 1px solid var(--line-2);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 14px;
+      resize: vertical;
+      outline: none;
+    }
+    textarea:focus { border-color: var(--blue-hi); }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .hint { font-size: 12px; color: var(--ink-2); }
+    .run-btn {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: 12px 22px;
+      font-family: var(--mono);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+    }
+    .run-btn:hover { background: var(--blue-hi); }
+    .run-btn:disabled { opacity: 0.55; cursor: wait; }
+
+    #results-wrap { margin-top: 24px; display: none; }
+    .verdict-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--line-2);
+      background: var(--panel-2);
+      margin-bottom: 14px;
+    }
+    .verdict-badge {
+      font-family: var(--disp);
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: 0.02em;
+    }
+    .v-FAILED { color: var(--err); }
+    .v-PASSED { color: var(--ok); }
+    .v-SKIPPED { color: var(--warn); }
+
+    .chips { display: flex; gap: 10px; font-size: 12px; flex-wrap: wrap; }
+    .chip { padding: 4px 9px; border: 1px solid var(--line-2); background: var(--panel); }
+    .c-ok { border-color: rgba(107,227,196,.4); color: var(--ok); }
+    .c-fail { border-color: rgba(255,77,106,.45); color: var(--err); }
+    .c-skip { border-color: rgba(247,201,72,.35); color: var(--warn); }
+
+    .item {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 13px 15px;
+      margin-bottom: 10px;
+      border-left: 3px solid var(--muted);
+    }
+    .item.st-OK { border-left-color: var(--ok); }
+    .item.st-FAIL { border-left-color: var(--err); background: rgba(255, 77, 106, 0.035); }
+    .item.st-SKIP { border-left-color: var(--warn); }
+    .item-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .item-status { font-weight: 600; font-size: 12px; letter-spacing: 0.05em; }
+    .st-OK .item-status { color: var(--ok); }
+    .st-FAIL .item-status { color: var(--err); }
+    .st-SKIP .item-status { color: var(--warn); }
+    .item-url { color: var(--ink-2); font-size: 12px; word-break: break-all; text-decoration: underline; }
+    .item-reason { font-size: 13px; color: var(--ink); margin-bottom: 4px; }
+    .item-claim { font-size: 12px; color: var(--ink-2); border-left: 2px solid var(--line-2); padding-left: 8px; margin-top: 6px; }
+    .item-snip { font-size: 12px; color: var(--ok); opacity: 0.9; margin-top: 6px; }
+
+    .trap-cta {
+      margin-top: 22px;
+      border: 1px solid var(--blue);
+      background: linear-gradient(135deg, rgba(43,43,255,0.14), rgba(9,9,16,0.96));
+      padding: 20px;
+    }
+    .trap-cta h2 {
+      font-family: var(--disp);
+      margin: 0 0 8px;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+    .trap-cta p { margin: 0 0 14px; color: var(--ink-2); max-width: 72ch; }
+    .cta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
+    }
+    .cta-card {
+      background: var(--panel);
+      border: 1px solid var(--line-2);
+      padding: 13px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .cta-card:hover { border-color: var(--ink); }
+    .cta-title { font-weight: 600; color: var(--ink); font-size: 13px; }
+    .cta-desc { font-size: 12px; color: var(--ink-2); }
+    .cta-link { font-size: 12px; color: var(--ok); font-weight: 600; }
+
+    .share-row {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    pre.card-preview {
+      background: #040406;
+      border: 1px solid var(--line);
+      padding: 12px;
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      margin: 10px 0 0;
+      color: var(--ink-2);
+    }
+
+    .footer-note {
+      margin-top: 42px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-sq"></span>
+        <span>PULSAR // QUOTEGATE v1.0</span>
+      </div>
+      <div class="nav-right">
+        <button class="pill active" id="lang-ru" onclick="setLang('ru')">RU</button>
+        <button class="pill" id="lang-en" onclick="setLang('en')">EN</button>
+        <a class="pill" href="https://github.com/enigmagen3-dot/quotegate" target="_blank" onclick="track('cta_github', 'header')">GitHub MIT</a>
+        <a class="pill pill-blue" href="https://t.me/Forge_Systems_0bot?start=quotegate_web" target="_blank" onclick="track('cta_bot', 'header')" data-i18n="nav_bot">Telegram Бот</a>
+      </div>
+    </header>
+
+    <h1 data-i18n="hero_title">Детектор выдуманных ссылок и цифр в отчётах нейросетей</h1>
+    <p class="lead" data-i18n="hero_lead">
+      <strong>HTTP 200 доказывает, что страница существует — но не доказывает, что цитата или цифра там есть.</strong>
+      Вставь любой Markdown-отчёт ИИ или URL готовой статьи: сервер скачает источники, вырежет HTML-мусор и сверит факты дословно. JS-сайты и пэйволлы честно помечаются <code>SKIP</code> без ложных обвинений.
+    </p>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-val" id="m-scans">—</div>
+        <div class="metric-lbl" data-i18n="m_scans">Проведено проверок</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val" style="color:var(--err)" id="m-fails">—</div>
+        <div class="metric-lbl" data-i18n="m_fails">Поймано галлюцинаций 200 OK</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val" style="color:var(--ok)" id="m-ok">—</div>
+        <div class="metric-lbl" data-i18n="m_ok">Подтверждено источников</div>
+      </div>
+    </div>
+
+    <section class="box">
+      <div class="samples">
+        <span class="samples-lbl" data-i18n="samples_lbl">Примеры в 1 клик:</span>
+        <button class="sample-btn" onclick="loadSample('hallucination')" data-i18n="s_hallucination">Отчёт GPT с враньём за 200 OK</button>
+        <button class="sample-btn" onclick="loadSample('article')" data-i18n="s_article">Аудит живой статьи Habr по URL</button>
+        <button class="sample-btn" onclick="loadSample('legacy')" data-i18n="s_legacy">Строгий CI-формат [S01]</button>
+      </div>
+
+      <textarea id="input-box" placeholder="Вставь Markdown/текст с URL и цитатами/цифрами — или одну ссылку https://... на статью для аудита..."></textarea>
+
+      <div class="actions">
+        <span class="hint" id="status-hint" data-i18n="hint_ready">Лимит: до 15 URL за скан · SSRF-защита · без регистрации</span>
+        <button class="run-btn" id="run-btn" onclick="runAudit()" data-i18n="btn_run">ПРОВЕРИТЬ ИСТОЧНИКИ</button>
+      </div>
+    </section>
+
+    <section id="results-wrap">
+      <div class="verdict-bar">
+        <div class="verdict-badge" id="verdict-badge">VERDICT: —</div>
+        <div class="chips" id="verdict-chips"></div>
+      </div>
+
+      <div id="items-list"></div>
+
+      <div class="share-row">
+        <button class="pill" onclick="copyShareCard()" data-i18n="btn_copy">Скопировать 6-строчный разбор для Telegram / Хабра</button>
+        <span class="hint" id="copy-status"></span>
+      </div>
+      <pre class="card-preview" id="card-preview"></pre>
+
+      <div class="trap-cta" id="trap-cta">
+        <h2 id="cta-headline" data-i18n="cta_title">Твой агент тоже может подменять факты за живыми ссылками</h2>
+        <p id="cta-body" data-i18n="cta_body">
+          Обычный промпт «проверь ссылки» проверяет только статус 200. Чтобы Claude Code, Cursor или ChatGPT не выпускали галлюцинации в прод и отчёты, нужен машинный контур остановки (exit 1) и протокол P-S-E-V.
+        </p>
+        <div class="cta-grid">
+          <a class="cta-card" href="https://github.com/enigmagen3-dot/quotegate" target="_blank" onclick="track('cta_github', 'result')">
+            <div>
+              <div class="cta-title">1. Бесплатный MIT CLI для CI/CD</div>
+              <div class="cta-desc" data-i18n="c1_desc">Запускай ./quotegate в терминале и GitHub Actions без зависимостей (Python 3 stdlib).</div>
+            </div>
+            <div class="cta-link">github.com/enigmagen3-dot/quotegate →</div>
+          </a>
+          <a class="cta-card" href="https://t.me/Forge_Systems_0bot?start=quotegate_web" target="_blank" onclick="track('cta_bot', 'result')">
+            <div>
+              <div class="cta-title">2. Полный харнесс IRON SUIT</div>
+              <div class="cta-desc" data-i18n="c2_desc">Машина состояний P-S-E-V, 2-контурный ревизор, анти-слоп гейт и 8 скилл-паков для агентов.</div>
+            </div>
+            <div class="cta-link">@Forge_Systems_0bot →</div>
+          </a>
+          <a class="cta-card" href="https://t.me/Pulsar_supports" target="_blank" onclick="track('cta_b2b', 'result')">
+            <div>
+              <div class="cta-title">3. Аудит / внедрение команде за 48ч</div>
+              <div class="cta-desc" data-i18n="c3_desc">Поставим автоматические гейты на отчёты, код и деплой для агентства или команды.</div>
+            </div>
+            <div class="cta-link">@Pulsar_supports →</div>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer-note">
+      <span>PULSAR Lab · MIT quotegate</span>
+      <span>
+        <a href="https://pulsare-lab.space/">pulsare-lab.space</a> ·
+        <a href="https://pulsare-lab.space/app/">Mini App</a> ·
+        <a href="https://t.me/pulsar_halyava">@pulsar_halyava</a>
+      </span>
+    </footer>
+  </div>
+
+  <script>
+    const I18N = {
+      ru: {
+        nav_bot: "Telegram Бот",
+        hero_title: "Детектор выдуманных ссылок и цифр в отчётах нейросетей",
+        hero_lead: '<strong>HTTP 200 доказывает, что страница существует — но не доказывает, что цитата или цифра там есть.</strong> Вставь любой Markdown-отчёт ИИ или URL готовой статьи: сервер скачает источники, вырежет HTML-мусор и сверит факты дословно. JS-сайты и пэйволлы честно помечаются <code>SKIP</code> без ложных обвинений.',
+        m_scans: "Проведено проверок",
+        m_fails: "Поймано галлюцинаций 200 OK",
+        m_ok: "Подтверждено источников",
+        samples_lbl: "Примеры в 1 клик:",
+        s_hallucination: "Отчёт GPT с враньём за 200 OK",
+        s_article: "Аудит живой статьи Habr по URL",
+        s_legacy: "Строгий CI-формат [S01]",
+        hint_ready: "Лимит: до 15 URL за скан · SSRF-защита · без регистрации",
+        btn_run: "ПРОВЕРИТЬ ИСТОЧНИКИ",
+        btn_copy: "Скопировать 6-строчный разбор для Telegram / Хабра",
+        cta_title: "Твой агент тоже может подменять факты за живыми ссылками",
+        cta_body: "Обычный промпт «проверь ссылки» проверяет только статус 200. Чтобы Claude Code, Cursor или ChatGPT не выпускали галлюцинации в прод и отчёты, нужен машинный контур остановки (exit 1) и протокол P-S-E-V.",
+        c1_desc: "Запускай ./quotegate в терминале и GitHub Actions без зависимостей (Python 3 stdlib).",
+        c2_desc: "Машина состояний P-S-E-V, 2-контурный ревизор, анти-слоп гейт и 8 скилл-паков для агентов.",
+        c3_desc: "Поставим автоматические гейты на отчёты, код и деплой для агентства или команды.",
+        placeholder: "Вставь Markdown/текст с URL и цитатами/цифрами — или одну ссылку https://... на статью для аудита..."
+      },
+      en: {
+        nav_bot: "Telegram Bot",
+        hero_title: "Catch AI-fabricated quotes & figures hiding behind HTTP 200",
+        hero_lead: '<strong>An HTTP 200 proves the page exists. It does not prove the quote or number is on it.</strong> Paste any LLM Markdown report or live article URL: quotegate fetches pages, strips HTML chrome, and verifies claims verbatim. JS shells & paywalls return <code>SKIP</code>, never false blames.',
+        m_scans: "Total Scans",
+        m_fails: "200 OK Hallucinations Caught",
+        m_ok: "Claims Verified",
+        samples_lbl: "1-click samples:",
+        s_hallucination: "LLM Report w/ 200 OK Lie",
+        s_article: "Live Habr Article Audit",
+        s_legacy: "CI Structured [S01] Mode",
+        hint_ready: "Up to 15 URLs/scan · SSRF protected · zero signup",
+        btn_run: "VERIFY SOURCES",
+        btn_copy: "Copy 6-line Audit Card",
+        cta_title: "Stop letting Claude Code, Cursor & ChatGPT ship fake citations",
+        cta_body: "Asking a model to double-check its links only checks status 200. quotegate enforces deterministic verification (exit 1 on any lie), while Iron Suit adds a P-S-E-V execution loop and anti-slop reviewer.",
+        c1_desc: "Zero-dependency Python 3 CLI for local runs & GitHub Actions CI.",
+        c2_desc: "P-S-E-V state machine, 2-loop reviewer, anti-slop gate & 8 skill packs.",
+        c3_desc: "48h team workflow audit & deterministic CI/agent guardrails.",
+        placeholder: "Paste Markdown/text with URLs & claims — or a single https://... article URL to audit..."
+      }
+    };
+
+    const SAMPLES = {
+      hallucination: [
+        "- По разбору [VC.ru](https://vc.ru/chatgpt/3251595-kak-kupit-chatgpt-plus-v-rossii), при оформлении «не требуется передавать посреднику пароль, коды входа или содержимое браузерной сессии».",
+        "- По той же ссылке [VC.ru](https://vc.ru/chatgpt/3251595-kak-kupit-chatgpt-plus-v-rossii) указано, что «Клодыч продаёт ChatGPT Plus за 100 рублей в месяц».",
+        "- Согласно [Example Domain](https://example.com), этот домен «is for use in documentation examples without needing permission»."
+      ].join("\n"),
+      article: "https://habr.com/ru/articles/858000/",
+      legacy: [
+        "[S01] URL: https://example.com",
+        "Цитата: «This domain is for use in documentation examples without needing permission»",
+        "",
+        "[S02] URL: https://example.com",
+        "Цитата: «99% users prefer subscription arbitrage»"
+      ].join("\n")
+    };
+
+    let curLang = "ru";
+    let lastAudit = null;
+
+    function setLang(lang) {
+      curLang = lang;
+      document.getElementById("lang-ru").classList.toggle("active", lang === "ru");
+      document.getElementById("lang-en").classList.toggle("active", lang === "en");
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.getAttribute("data-i18n");
+        if (I18N[lang][key]) el.innerHTML = I18N[lang][key];
+      });
+      document.getElementById("input-box").placeholder = I18N[lang].placeholder;
+    }
+
+    function track(event, meta) {
+      fetch("/api/check/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event, meta: meta || "" })
+      }).catch(() => {});
+    }
+
+    function updateStats(s) {
+      if (!s) return;
+      document.getElementById("m-scans").textContent = s.total_scans;
+      document.getElementById("m-fails").textContent = s.hallucinations_caught;
+      document.getElementById("m-ok").textContent = s.ok_verified;
+    }
+
+    function loadSample(name) {
+      document.getElementById("input-box").value = SAMPLES[name] || "";
+      track("sample_click", name);
+      runAudit();
+    }
+
+    function esc(s) {
+      return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    function buildShareCard(audit) {
+      const s = audit.summary || {};
+      const fails = (audit.results || []).filter((r) => r.status === "FAIL");
+      const firstFail = fails[0];
+      return [
+        `Артефакт: ${audit.mode === "url_audit" ? (audit.source?.source_url || "публичная статья") : "ИИ-отчёт"} (${s.total || 0} проверок)`,
+        `Сканер:   https://pulsare-lab.space/check (quotegate MIT)`,
+        `Вывод:    OK=${s.ok || 0} | FAIL=${s.fail || 0} | SKIP=${s.skip || 0} | ВЕРДИКТ: ${audit.verdict}`,
+        firstFail
+          ? `Пример:   ${firstFail.id} — ${firstFail.reason}\nЦитата:   «${firstFail.claim.slice(0, 120)}»`
+          : `Деталь:   ложных утверждений за 200 OK в проверенных источниках не найдено`,
+        `Почему важно: HTTP 200 подтверждает только доступность URL, а не наличие цифр и цитат на странице.`
+      ].join("\n");
+    }
+
+    async function runAudit() {
+      const box = document.getElementById("input-box");
+      const btn = document.getElementById("run-btn");
+      const hint = document.getElementById("status-hint");
+      const raw = box.value.trim();
+      if (!raw) {
+        hint.textContent = curLang === "ru" ? "Сначала вставь текст или URL." : "Paste text or a URL first.";
+        return;
+      }
+      btn.disabled = true;
+      hint.textContent = curLang === "ru" ? "Скачиваю страницы и сверяю дословно (3–8 сек)..." : "Fetching sources & matching verbatim...";
+      try {
+        const res = await fetch("/api/check/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: raw })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          hint.textContent = data.error || "Ошибка проверки";
+          return;
+        }
+        updateStats(data.stats);
+        renderResults(data.audit);
+        hint.textContent = I18N[curLang].hint_ready;
+      } catch (e) {
+        hint.textContent = "Ошибка сети: " + e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderResults(audit) {
+      lastAudit = audit;
+      const wrap = document.getElementById("results-wrap");
+      wrap.style.display = "block";
+      const s = audit.summary || {};
+      const vb = document.getElementById("verdict-badge");
+      vb.textContent = "VERDICT: " + audit.verdict;
+      vb.className = "verdict-badge v-" + audit.verdict;
+
+      document.getElementById("verdict-chips").innerHTML = `
+        <span class="chip c-ok">OK = ${s.ok || 0}</span>
+        <span class="chip c-fail">FAIL = ${s.fail || 0}</span>
+        <span class="chip c-skip">SKIP = ${s.skip || 0}</span>
+      `;
+
+      const list = document.getElementById("items-list");
+      if (audit.error) {
+        list.innerHTML = `<div class="item st-SKIP"><div class="item-reason">${esc(audit.error)}</div></div>`;
+      } else {
+        list.innerHTML = (audit.results || []).map((r) => `
+          <div class="item st-${esc(r.status)}">
+            <div class="item-head">
+              <span class="item-status">[${esc(r.id)}] ${esc(r.status)} · HTTP ${esc(r.http_status)}</span>
+              <a class="item-url" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>
+            </div>
+            <div class="item-reason">${esc(r.reason)}</div>
+            <div class="item-claim">${esc(r.claim)}</div>
+            ${r.matched_snippet ? `<div class="item-snip">Match: «${esc(r.matched_snippet)}»</div>` : ""}
+          </div>
+        `).join("");
+      }
+
+      document.getElementById("card-preview").textContent = buildShareCard(audit);
+
+      const ctaH = document.getElementById("cta-headline");
+      if ((s.fail || 0) > 0) {
+        ctaH.textContent = curLang === "ru"
+          ? `Поймано ${s.fail} фейк(ов) за живым HTTP 200 — останови это в своём пайплайне`
+          : `Caught ${s.fail} lie(s) hiding behind HTTP 200 — stop them before shipping`;
+      } else {
+        ctaH.textContent = I18N[curLang].cta_title;
+      }
+      wrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function copyShareCard() {
+      if (!lastAudit) return;
+      const text = document.getElementById("card-preview").textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        document.getElementById("copy-status").textContent = curLang === "ru" ? "Скопировано!" : "Copied!";
+        track("copy_card", lastAudit.verdict);
+      });
+    }
+
+    fetch("/api/check/stats").then((r) => r.json()).then((d) => d.ok && updateStats(d.stats)).catch(() => {});
+  </script>
+</body>
+</html>
