@@ -373,6 +373,7 @@
 
       <div class="share-row">
         <button class="pill" onclick="copyShareCard()" data-i18n="btn_copy">Скопировать 6-строчный разбор для Telegram / Хабра</button>
+        <button class="pill pill-blue" id="btn-copy-link" style="display:none" onclick="copyReportUrl()" data-i18n="btn_copy_link">Скопировать прямую ссылку на отчёт</button>
         <span class="hint" id="copy-status"></span>
       </div>
       <pre class="card-preview" id="card-preview"></pre>
@@ -434,6 +435,7 @@
         hint_ready: "Лимит: до 15 URL за скан · SSRF-защита · без регистрации",
         btn_run: "ПРОВЕРИТЬ ИСТОЧНИКИ",
         btn_copy: "Скопировать 6-строчный разбор для Telegram / Хабра",
+        btn_copy_link: "Скопировать прямую ссылку на отчёт",
         cta_title: "Твой агент тоже может подменять факты за живыми ссылками",
         cta_body: "Обычный промпт «проверь ссылки» проверяет только статус 200. Чтобы Claude Code, Cursor или ChatGPT не выпускали галлюцинации в прод и отчёты, нужен машинный контур остановки (exit 1) и протокол P-S-E-V.",
         c1_desc: "Запускай ./quotegate в терминале и GitHub Actions без зависимостей (Python 3 stdlib).",
@@ -455,6 +457,7 @@
         hint_ready: "Up to 15 URLs/scan · SSRF protected · zero signup",
         btn_run: "VERIFY SOURCES",
         btn_copy: "Copy 6-line Audit Card",
+        btn_copy_link: "Copy Permalink to Report",
         cta_title: "Stop letting Claude Code, Cursor & ChatGPT ship fake citations",
         cta_body: "Asking a model to double-check its links only checks status 200. quotegate enforces deterministic verification (exit 1 on any lie), while Iron Suit adds a P-S-E-V execution loop and anti-slop reviewer.",
         c1_desc: "Zero-dependency Python 3 CLI for local runs & GitHub Actions CI.",
@@ -519,13 +522,19 @@
       return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     }
 
+    function getShareUrl(audit) {
+      if (audit && audit.share_url) return audit.share_url;
+      if (audit && audit.report_id) return window.location.origin + "/check/r/" + audit.report_id;
+      return "https://pulsare-lab.space/check";
+    }
+
     function buildShareCard(audit) {
       const s = audit.summary || {};
       const fails = (audit.results || []).filter((r) => r.status === "FAIL");
       const firstFail = fails[0];
       return [
         `Артефакт: ${audit.mode === "url_audit" ? (audit.source?.source_url || "публичная статья") : "ИИ-отчёт"} (${s.total || 0} проверок)`,
-        `Сканер:   https://pulsare-lab.space/check (quotegate MIT)`,
+        `Отчёт:    ${getShareUrl(audit)}`,
         `Вывод:    OK=${s.ok || 0} | FAIL=${s.fail || 0} | SKIP=${s.skip || 0} | ВЕРДИКТ: ${audit.verdict}`,
         firstFail
           ? `Пример:   ${firstFail.id} — ${firstFail.reason}\nЦитата:   «${firstFail.claim.slice(0, 120)}»`
@@ -558,6 +567,9 @@
         }
         updateStats(data.stats);
         renderResults(data.audit);
+        if (data.report_id && window.history && window.history.replaceState) {
+          window.history.replaceState(null, "", "/check/r/" + data.report_id);
+        }
         hint.textContent = I18N[curLang].hint_ready;
       } catch (e) {
         hint.textContent = "Ошибка сети: " + e.message;
@@ -599,6 +611,10 @@
       }
 
       document.getElementById("card-preview").textContent = buildShareCard(audit);
+      const copyLinkBtn = document.getElementById("btn-copy-link");
+      if (copyLinkBtn) {
+        copyLinkBtn.style.display = (audit.report_id || audit.share_url) ? "inline-flex" : "none";
+      }
 
       const ctaH = document.getElementById("cta-headline");
       if ((s.fail || 0) > 0) {
@@ -620,7 +636,34 @@
       });
     }
 
-    fetch("/api/check/stats").then((r) => r.json()).then((d) => d.ok && updateStats(d.stats)).catch(() => {});
+    function copyReportUrl() {
+      if (!lastAudit) return;
+      const url = getShareUrl(lastAudit);
+      navigator.clipboard.writeText(url).then(() => {
+        document.getElementById("copy-status").textContent = url;
+        track("copy_report_url", lastAudit.report_id || "");
+      });
+    }
+
+    (function initPage() {
+      const m = window.location.pathname.match(/\/check\/r\/([a-zA-Z0-9_-]+)/);
+      if (m) {
+        const rid = m[1];
+        fetch("/api/check/report/" + encodeURIComponent(rid))
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.stats) updateStats(d.stats);
+            if (d.ok && d.audit) {
+              renderResults(d.audit);
+            } else {
+              document.getElementById("status-hint").textContent = "Отчёт не найден или истёк.";
+            }
+          })
+          .catch(() => {});
+      } else {
+        fetch("/api/check/stats").then((r) => r.json()).then((d) => d.ok && updateStats(d.stats)).catch(() => {});
+      }
+    })();
   </script>
 </body>
 </html>

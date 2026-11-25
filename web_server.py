@@ -8,11 +8,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import secrets
 import sqlite3
 import time
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Deque, Dict
+from typing import Deque, Dict, Optional
 
 import quotegate_engine as qg
 
@@ -20,10 +22,12 @@ HOST = os.environ.get("QUOTEGATE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("QUOTEGATE_PORT", "8787"))
 DB_PATH = os.environ.get("QUOTEGATE_DB", os.path.join(os.path.dirname(__file__), "scans.sqlite3"))
 HTML_PATH = os.path.join(os.path.dirname(__file__), "web", "index.html")
+PUBLIC_BASE = os.environ.get("QUOTEGATE_PUBLIC_BASE", "https://pulsare-lab.space").rstrip("/")
 SALT = os.environ.get("QUOTEGATE_IP_SALT", "pulsar-quotegate-2026")
 RATE_WINDOW_SEC = 600
 RATE_MAX_REQ = 25
 MAX_INPUT_CHARS = 40_000
+_REPORT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{6,24}$")
 
 _rate_buckets: Dict[str, Deque[float]] = defaultdict(deque)
 
@@ -57,11 +61,46 @@ def init_db() -> sqlite3.Connection:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reports (
+            id TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            payload_json TEXT NOT NULL
+        )
+        """
+    )
     conn.commit()
     return conn
 
 
 _DB = init_db()
+
+
+def _save_report(audit: dict) -> str:
+    rid = secrets.token_hex(5)
+    payload = json.dumps(audit, ensure_ascii=False)
+    _DB.execute(
+        "INSERT OR REPLACE INTO reports (id, ts, payload_json) VALUES (?, datetime('now'), ?)",
+        (rid, payload),
+    )
+    _DB.commit()
+    return rid
+
+
+def _load_report(rid: str) -> Optional[dict]:
+    if not _REPORT_ID_RE.match(rid):
+        return None
+    row = _DB.execute("SELECT ts, payload_json FROM reports WHERE id = ?", (rid,)).fetchone()
+    if not row:
+        return None
+    try:
+        data = json.loads(row[1])
+        data["report_id"] = rid
+        data["created_at"] = row[0]
+        return data
+    except Exception:
+        return None
 
 
 def _ip_hash(client_ip: str) -> str:
@@ -99,7 +138,7 @@ def _get_stats() -> dict:
 
 
 class QuotegateHandler(BaseHTTPRequestHandler):
-    server_version = "PULSAR-Quotegate/1.0"
+    server_version = "PULSAR-Quotegate/1.1"
 
     def _client_ip(self) -> str:
         xff = self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
@@ -139,12 +178,18 @@ class QuotegateHandler(BaseHTTPRequestHandler):
 
     def _handle_get(self, head_only: bool = False) -> None:
         path = self.path.split("?", 1)[0]
-        if path in ("/check", "/check/", "/"):
+        if path in ("/check", "/check/", "/") or path.startswith("/check/r/"):
             return self._send_html(200, HTML_PATH, head_only=head_only)
         if path == "/api/check/healthz":
-            return self._send_json(200, {"ok": True, "service": "quotegate-web", "version": "1.0"}, head_only=head_only)
+            return self._send_json(200, {"ok": True, "service": "quotegate-web", "version": "1.1"}, head_only=head_only)
         if path == "/api/check/stats":
             return self._send_json(200, {"ok": True, "stats": _get_stats()}, head_only=head_only)
+        if path.startswith("/api/check/report/"):
+            rid = path.split("/api/check/report/", 1)[1].strip("/")
+            rep = _load_report(rid)
+            if not rep:
+                return self._send_json(404, {"ok": False, "error": "Report not found"}, head_only=head_only)
+            return self._send_json(200, {"ok": True, "audit": rep, "stats": _get_stats()}, head_only=head_only)
         self._send_json(404, {"error": "Not found"}, head_only=head_only)
 
     def do_POST(self) -> None:
@@ -202,7 +247,11 @@ class QuotegateHandler(BaseHTTPRequestHandler):
                 ),
             )
             _DB.commit()
-            return self._send_json(200, {"ok": True, "audit": audit, "stats": _get_stats()})
+            rid = _save_report(audit)
+            share_url = f"{PUBLIC_BASE}/check/r/{rid}"
+            audit["report_id"] = rid
+            audit["share_url"] = share_url
+            return self._send_json(200, {"ok": True, "audit": audit, "report_id": rid, "share_url": share_url, "stats": _get_stats()})
 
         return self._send_json(404, {"error": "Not found"})
 

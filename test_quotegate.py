@@ -151,6 +151,18 @@ class TestQuotegate(unittest.TestCase):
                         self.assertTrue(resp["ok"])
                         self.assertEqual(resp["audit"]["verdict"], "PASSED")
                         self.assertEqual(resp["stats"]["total_scans"], 1)
+                        rid = resp.get("report_id")
+                        self.assertTrue(rid)
+                        self.assertIn(f"/check/r/{rid}", resp.get("share_url", ""))
+
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/check/report/{rid}") as r:
+                    rep = json.loads(r.read())
+                    self.assertTrue(rep["ok"])
+                    self.assertEqual(rep["audit"]["report_id"], rid)
+
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/check/r/{rid}") as r:
+                    self.assertEqual(r.status, 200)
+                    self.assertIn(b"PULSAR // QUOTEGATE", r.read())
             finally:
                 srv.shutdown()
                 srv.server_close()
