@@ -1,3 +1,5 @@
 *.sqlite3*
 __pycache__/
 *.pyc
+# Supplier API keys must NEVER be committed to GitHub.
+.env*
